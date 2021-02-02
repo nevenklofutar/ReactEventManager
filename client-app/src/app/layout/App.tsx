@@ -1,15 +1,19 @@
-import React, { useState, useEffect, Fragment } from "react";
+import React, { useState, useEffect, Fragment, SyntheticEvent } from "react";
 
-import axios from "axios";
 import { Container } from "semantic-ui-react";
 import { IActivity } from "../models/activity";
 import { NavBar } from "../../features/navbar/NavBar";
 import ActivityDashboard from "../../features/activities/dashboard/ActivityDashboard";
+import agent from "../api/agent";
+import LoadingComponent from "./LoadingComponent";
 
 const App = () => {
    const [activities, setActivities] = useState<IActivity[]>([]);
    const [selectedActivity, setSelectedActivity] = useState<IActivity | null>(null);
    const [editMode, setEditMode] = useState(false);
+   const [loading, setLoading] = useState(true);
+   const [submitting, setSubmitting] = useState(false);
+   const [target, setTarget] = useState('');
 
    const handleSelectActivity = (id: string) => {
       setSelectedActivity(activities.filter((a) => a.id === id)[0]);
@@ -22,35 +26,60 @@ const App = () => {
    };
 
    const handleCreateActivity = (activity: IActivity) => {
-      setActivities([...activities, activity]);
-      setSelectedActivity(activity);
-      setEditMode(false);
+      setSubmitting(true);
+      agent.Activities.create(activity)
+         .then(() => {
+            setActivities([...activities, activity]);
+            setSelectedActivity(activity);
+            setEditMode(false);
+         })
+         .then(() => {
+            setSubmitting(false);
+         });
    };
 
    const handleEditActivity = (activity: IActivity) => {
-      setActivities([...activities.filter((a) => a.id !== activity.id), activity]);
-      setSelectedActivity(activity);
-      setEditMode(false);
+      setSubmitting(true);
+      agent.Activities.update(activity)
+         .then(() => {
+            setActivities([...activities.filter((a) => a.id !== activity.id), activity]);
+            setSelectedActivity(activity);
+            setEditMode(false);
+         })
+         .then(() => {
+            setSubmitting(false);
+         });
    };
 
-   const handleDeleteActivity = (activityId: string) => {
-      setActivities([...activities.filter(a => a.id !== activityId)]);
-   }
+   const handleDeleteActivity = (event: SyntheticEvent<HTMLButtonElement>, activityId: string) => {
+      setSubmitting(true);
+      setTarget(event.currentTarget.name);
+      agent.Activities.delete(activityId)
+         .then(() => {
+            setActivities([...activities.filter((a) => a.id !== activityId)]);
+         })
+         .then(() => {
+            setSubmitting(false);
+         });
+   };
 
    useEffect(() => {
-      axios.get<IActivity[]>("http://localhost:5000/api/activities")
+      agent.Activities.list()
          .then((response) => {
             let activities: IActivity[] = [];
 
             // solving problem with date format
-            response.data.forEach(activity => {
-               activity.date = activity.date.split('.')[0];
+            response.forEach((activity) => {
+               activity.date = activity.date.split(".")[0];
                activities.push(activity);
             });
 
             setActivities(activities);
-      });
+         })
+         .then(() => setLoading(false));
    }, []);
+
+   if (loading) return <LoadingComponent content="Loading ..."></LoadingComponent>;
 
    return (
       <Fragment>
@@ -66,6 +95,8 @@ const App = () => {
                createActivity={handleCreateActivity}
                editActivity={handleEditActivity}
                deleteActivity={handleDeleteActivity}
+               submitting={submitting}
+               target={target}
             ></ActivityDashboard>
          </Container>
       </Fragment>
